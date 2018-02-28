@@ -61,7 +61,7 @@ def insertUnit(name, shusshin, nenrei, seibetsu, rare, zokusei, seichouType, buk
 			print(row[0])
 			insId = int(row[0]) + 1
 
-	# 本のデータの挿入増えたら足してく
+	# データの挿入増えたら足してく
 	insert_sql = 'insert into unit(id, name, shusshin, nenrei, seibetsu, rare, zokusei, seichouType, buki, bukiShubetsu, doujikougekiSuu, kougekiDansuu, shokiHp, saidaiHp, kakuseiHp, idousokudo, reach, shokiKougeki, saidaiKougeki, kakuseiKougeki, kougekiKankaku, toughness, zokuseiHonoo, zokuseiMizu, zokuseiKaze, zokuseiHikari, zokuseiYami, updateDate, createDate, displayFlag) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
 	unit = [
 	    (insId, str(name), str(shusshin), int(nenrei), str(seibetsu), str(rare), str(zokusei), str(seichouType), str(buki), str(bukiShubetsu), int(doujiKougekiSuu), int(kougekiDansuu), int(shokiHp), int(saidaiHp), int(kakuseiHp), int(idousokudo), int(reach), int(shokiKougeki), int(saidaiKougeki), int(kakuseiKougeki), float(kougekiKankaku), int(toughness), int(zokuseiHonoo), int(zokuseiMizu), int(zokuseiKaze), int(zokuseiHikari), int(zokuseiYami), datetime.now().strftime("%Y/%m/%d %H:%M:%S"), datetime.now().strftime("%Y/%m/%d %H:%M:%S"), 1)
@@ -80,7 +80,7 @@ def updateBook(id, bookName=None, bookNameKana=None, thumbnailPath=None, path=No
 		conn.close()
 		raise Exception("id is not found")
 
-	# 本のデータの挿入増えたら足してく
+	# データの挿入増えたら足してく
 	# 空たぷる生成
 	param = ()
 	update_sql = 'update unit set '

@@ -165,6 +165,26 @@ class Thumbnail:
 			'displayFlag' : self.displayFlag
 		}
 
+class UnitListParam:
+	kunrenjo = 30;
+	zangekiShisetsu = 12;
+	totsugekiShisetsu = 12;
+	dagekiShisetsu = 12;
+	yumiShisetsu = 12;
+	mahouShisetsu = 12;
+	juuShisetsu = 12;
+	kaihukuShisetsu = 12;
+	soulKougeki = 35000;
+	breakKougeki = 35000;
+	atackRune = 33;
+	quickRune = 33;
+	exantRune = 33;
+	honooRune = 33;
+	mizuRune = 33;
+	kazeRune = 33;
+	yamiRune = 33;
+	hikariRune = 33;
+
 
 class ViewerImageJSONEncoder(json.JSONEncoder):
 	def default(self, o):
@@ -180,8 +200,8 @@ app.json_encoder = ViewerImageJSONEncoder
 def unitListNoKana(page, pageSize, manageList):
 	return unitList(page, pageSize, None, manageList)
 
-def unitList(page, pageSize, unitName, manageList='False', idList=None):
-	imageList = []
+def unitList(page, pageSize, unitName, manageList='False', idList=None, ignoreList=None, sortKey='dps'):
+	unitList = []
 	params =(pageSize, page*pageSize)
 	
 	# FIXME LIMIT OFFSETでページネーションしてるのでチューニングは必要	
@@ -192,7 +212,7 @@ def unitList(page, pageSize, unitName, manageList='False', idList=None):
 	if manageList=='True':
 		select_sql = 'select * from unit order by createDate desc limit ? offset ?'
 	else:
-		select_sql = 'select * from unit where displayFlag=1 order by createDate desc limit ? offset ?'
+		select_sql = 'select * from unit where displayFlag=1 order by (saidaiKougeki/kougekiKankaku) desc limit ? offset ?'
 	
 	if idList:
 		idList = [str(i) for i in idList]
@@ -206,8 +226,8 @@ def unitList(page, pageSize, unitName, manageList='False', idList=None):
 		c.execute(count_sql, count_params)
 	elif unitName:
 		unitName = u"%{}%".format(unitName)
-		params =(unitName)
-		count_params = (unitName)
+		params =(unitName,)
+		count_params = (unitName,)
 		
 		if manageList=='True':
 			count_sql = 'select count(*) from unit where ( name like ? '
@@ -220,7 +240,10 @@ def unitList(page, pageSize, unitName, manageList='False', idList=None):
 		count_sql = count_sql + ' ) '
 		select_sql = select_sql + ' ) '
 			
-		select_sql = select_sql + 'order by updateDate desc limit ? offset ?'
+		if sortKey=='dps': 
+			select_sql = select_sql + 'order by (saidaiKougeki/kougekiKankaku) desc limit ? offset ?'
+		else:
+			select_sql = select_sql + 'order by updateDate desc limit ? offset ?'
 		
 		params = params + (pageSize, page*pageSize)
 		
@@ -234,29 +257,46 @@ def unitList(page, pageSize, unitName, manageList='False', idList=None):
 	maxSize = c.fetchone()
 	
 	for row in c.execute(select_sql, params):
-#		id = row[0]
-#		name = row[1]
-#		path = row[3]
-#		folderName = row[4]
-#		category = row[5]
-#		updateDate = row[6]
-#		createDate = row[7]
-#		displayFlag = row[8]
-#		try:
-#			fileImage = PIL.Image.open(path)
-#		except:
-			# エラーの場合は飛ばす
-#			path = 'static' + os.sep + 'images' + os.sep + '404' + os.sep + '404error.png'
-#			fileImage = PIL.Image.open(path)
 		unitDisp = Thumbnail(*row)
-		imageList.append(unitDisp)
+		unitList.append(unitDisp)
 	conn.close
 	
 	print(maxSize)
-	print(imageList)
-	pageList = PageList(imageList, pageSize, math.ceil(maxSize[0]/pageSize), page)
+	print(unitList)
+	pageList = PageList(unitList, pageSize, math.ceil(maxSize[0]/pageSize), page)
 	return jsonify(pageList)
 
+# ユニットの詳細検索
+def detailUnitList(page, pageSize, unitName, manageList='False', idList=None, ignoreList=None, sortKey='dps'):
+	unitList = []
+	params =(pageSize, page*pageSize)
+	count_sql = 'select count(*) from unit where displayFlag=1'
+	select_sql = 'select * from unit where displayFlag=1'
+	if idList:
+		idList = [str(i) for i in idList]
+		idListStr = ','.join(idList)
+		count_sql = count_sql + ' id in(%s) ' % idListStr
+		select_sql = select_sql + ' id in(%s) ' % idListStr
+	
+	if sortKey=='dps':
+		dpsCalcStr = '(saidaiKougeki/kougekiKankaku)'
+		select_sql = select_sql + ' order by %s desc' %s
+	else:
+		select_sql = select_sql + ' order by createDate desc limit ? offset ?' % dpsCalcStr
+	
+	select_sql = select_sql + ' limit ? offset ?'
+	
+	conn = sqlite3.connect(dbpath+dbname)
+	c = conn.cursor()
+	c.execute(count_sql)
+	maxSize = c.fetchone()
+	for row in c.execute(select_sql, params):
+		unitDisp = Thumbnail(*row)
+		unitList.append(unitDisp)
+	conn.close
+	pageList = PageList(unitList, pageSize, math.ceil(maxSize[0]/pageSize), page)
+	return jsonify(pageList)
+	
 
 # Digest認証
 @auth.get_password

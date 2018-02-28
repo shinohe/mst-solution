@@ -76,19 +76,79 @@ div#asumi-frame-440-1833{
 	position:fixed !important;
 }
 
+table {
+	margin: 0.2em;
+	border-collapse:separate;
+	-webkit-border-radius: 10px;
+	-moz-border-radius: 10px;
+	border-radius: 10px;
+	background-color:#A9DFFF;
+}
+
+th:first-child {
+	-webkit-border-radius: 10px 0 0 0;
+	-moz-border-radius: 10px 0 0 0;
+	border-radius: 10px 0 0 0;
+}
+th:last-child {
+	-webkit-border-radius: 0 10px 0 0;
+	-moz-border-radius: 0 10px 0 0;
+	border-radius: 0 10px 0 0;
+}
+th,
+td {
+	padding: 0.2em;
+	text-align:left;
+	vertical-align:middle;
+	word-wrap: break-word;
+}
+
+th {
+	background-color:#A9DFFF;
+}
+
+th.name {
+	min-width:10em;
+}
+
+th.rarelity,
+th.zokusei,
+th.bukiShubetsu,
+th.delete {
+	width:auto;
+}
+
+td {
+	background-color:#FFFFFF;
+}
+
+tr:last-child td:first-child{
+	-webkit-border-radius: 0 0 0 10px;
+	-moz-border-radius: 0 0 0 10px;
+	border-radius: 0 0 0 10px;
+}
+
+tr:last-child td:last-child{
+	-webkit-border-radius: 0 0 10px 0;
+	-moz-border-radius: 0 0 10px 0;
+	border-radius: 0 0 10px 0;
+}
 </style>
 <script type="text/javascript">
 var page = 1;
 var searchFlag = false;
 
 var successCallBack = function(msg){
-	$(".indexContent").children("fieldset.ui-grid-solo").remove();
+	$(".indexContent").children("table.unitData").remove();
 	
 	var thumNailList = JSON.parse(msg.list);
 	if (thumNailList.length > 0) {
 		var $table = $("<table class='unitData'></table>")
+		var $tableHead = $("<tr><th class='name'>ユニット名</th><th class='rarelity'>★</th><th class='zokusei'>属性</th><th class='bukiShubetsu'>武器種</th><th class='dps'>DPS</th><th class='delete'>×</th></tr>");
+		$table.append($tableHead);
 		$.each(thumNailList, function( index, file){
-			var $div = $("<tr><td>"+file.name+"</td><td>"+file.rare+"</td><td>"+file.zokusei+"</td><td>"+file.bukiShubetsu+"</td><td>"+Math.round(file.kakuseiKougeki/file.kougekiKankaku)+"</td><td><input type='button' class='delIcon' value='削除'></div></td></tr>");
+			unitName = file.name.replace("」", "」<br/>");
+			var $div = $("<tr><td>"+unitName+"</td><td class='rarelity'>"+file.rare+"</td><td>"+file.zokusei+"</td><td>"+file.bukiShubetsu+"</td><td>"+Math.round(file.kakuseiKougeki/file.kougekiKankaku)+"</td><td><input type='button' class='delIcon' value='×'></div></td></tr>");
 			
 			$table.append($div);
 		});
@@ -135,7 +195,7 @@ var searchList = function(){
 		type: "POST",
 		url: "/Search/list",
 		contentType: "application/json",
-		data:'{"page":' + page + ',"searchText":"'+$("#searchText").val()+'", "pageSize":5}',
+		data:'{"page":' + page + ',"unitName":"'+$("#searchText").val()+'", "pageSize":5}',
 		dataType: "json",
 		success: function(msg){
 			successCallBack(msg);
