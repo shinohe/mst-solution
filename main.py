@@ -9,6 +9,7 @@ import json
 import sqlite3
 import math
 import logs
+from operator import itemgetter
 from dist import dist
 
 import sys  
@@ -33,6 +34,11 @@ auth = HTTPDigestAuth()
 users = {
 	"jdragon1": "jdragon1"
 }
+
+# おまじない
+def round(x,d=0):
+    p=10**d
+    return (x*p*2+1)//2/p
 
 class InvalidUsage(Exception):
 	status_code = 400
@@ -97,8 +103,11 @@ class Thumbnail:
 	zokuseiHikari = 0
 	updateDate = ''
 	createDate = ''
-
-	def __init__( self, id, name=None, shusshin=None, nenrei=None, seibetsu=None, rare=None, zokusei=None, seichouType=None, buki=None, bukiShubetsu=None, doujiKougekiSuu=None, kougekiDansuu=None, shokiHp=None, saidaiHp=None, kakuseiHp=None, idousokudo=None, reach=None, shokiKougeki=None, saidaiKougeki=None, kakuseiKougeki=None, kougekiKankaku=None, toughness=None, zokuseiHonoo=None, zokuseiMizu=None, zokuseiKaze=None, zokuseiHikari=None, zokuseiYami=None, updateDate=None, createDate=None, displayFlag=1):
+	tantaiDps = 0
+	saidaiDps=0
+	dps=0
+	
+	def __init__( self, id, name=None, shusshin=None, nenrei=None, seibetsu=None, rare=None, zokusei=None, seichouType=None, buki=None, bukiShubetsu=None, doujiKougekiSuu=None, kougekiDansuu=None, shokiHp=None, saidaiHp=None, kakuseiHp=None, idousokudo=None, reach=None, shokiKougeki=None, saidaiKougeki=None, kakuseiKougeki=None, kougekiKankaku=None, toughness=None, zokuseiHonoo=None, zokuseiMizu=None, zokuseiKaze=None, zokuseiHikari=None, zokuseiYami=None, updateDate=None, createDate=None, displayFlag=1, tantaiDps=None, saidaiDps=None, dps=None):
 		
 		self.id = id
 		self.name = name
@@ -130,6 +139,9 @@ class Thumbnail:
 		self.createDate = createDate
 		self.zokuseiYami = zokuseiYami
 		self.displayFlag = displayFlag
+		self.tantaiDps = tantaiDps
+		self.saidaiDps = saidaiDps
+		self.dps = dps
 		
 	def serialize(self):
 		return {
@@ -162,7 +174,10 @@ class Thumbnail:
 			'updateDate' : self.updateDate,
 			'createDate' : self.createDate,
 			'zokuseiYami' : self.zokuseiYami,
-			'displayFlag' : self.displayFlag
+			'displayFlag' : self.displayFlag,
+			'tantaiDps' : self.tantaiDps,
+			'saidaiDps' : self.saidaiDps,
+			'dps' : self.dps
 		}
 
 class UnitListParam:
@@ -196,6 +211,9 @@ class ViewerImageJSONEncoder(json.JSONEncoder):
 		
 app.json_encoder = ViewerImageJSONEncoder
 
+# ユニットリストのキャッシュデータ
+allUnitCache = []
+
 # メソッド
 def unitListNoKana(page, pageSize, manageList):
 	return unitList(page, pageSize, None, manageList)
@@ -221,7 +239,6 @@ def unitList(page, pageSize, unitName, manageList='False', idList=None, ignoreLi
 		select_sql = 'select * from unit where id in(%s) order by createDate desc limit ? offset ?' % idListStr
 		params =(pageSize, page*pageSize)
 		count_params = ()
-		print(params)
 		print(select_sql)
 		c.execute(count_sql, count_params)
 	elif unitName:
@@ -247,8 +264,6 @@ def unitList(page, pageSize, unitName, manageList='False', idList=None, ignoreLi
 		
 		params = params + (pageSize, page*pageSize)
 		
-		print(count_params)
-		print(params)
 		print(count_sql)
 		print(select_sql)
 		c.execute(count_sql, count_params)
@@ -267,24 +282,46 @@ def unitList(page, pageSize, unitName, manageList='False', idList=None, ignoreLi
 	return jsonify(pageList)
 
 # ユニットの詳細検索
-def detailUnitList(page, pageSize, unitName, manageList='False', idList=None, ignoreList=None, sortKey='dps'):
+def detailUnitList(page, pageSize, unitName, zokusei=None, idList=None, rare=None, bukiShubetsu=None, doujiKougekiSuu=None, ignoreList=None, sortKey='dps'):
 	unitList = []
 	params =(pageSize, page*pageSize)
 	count_sql = 'select count(*) from unit where displayFlag=1'
 	select_sql = 'select * from unit where displayFlag=1'
+	
 	if idList:
 		idList = [str(i) for i in idList]
 		idListStr = ','.join(idList)
-		count_sql = count_sql + ' id in(%s) ' % idListStr
-		select_sql = select_sql + ' id in(%s) ' % idListStr
+		count_sql = count_sql + ' and id in(%s) ' % idListStr
+		select_sql = select_sql + ' and id in(%s) ' % idListStr
+	
+	if zokusei:
+		zokusei = u'"{}"'.format(zokusei)
+		count_sql = count_sql + ' and zokusei=%s ' % zokusei
+		select_sql = select_sql + ' and zokusei=%s ' % zokusei
+		
+	if rare:
+		rare = u'"{}"'.format(rare)
+		count_sql = count_sql + ' and rare=%s ' % rare
+		select_sql = select_sql + ' and rare=%s ' % rare
+		
+	if bukiShubetsu:
+		bukiShubetsu = u'"{}"'.format(bukiShubetsu)
+		count_sql = count_sql + ' and bukiShubetsu=%s ' % bukiShubetsu
+		select_sql = select_sql + ' and bukiShubetsu=%s ' % bukiShubetsu
+	
+	if not doujiKougekiSuu:
+		doujiKougekiSuu = 1
 	
 	if sortKey=='dps':
 		dpsCalcStr = '(saidaiKougeki/kougekiKankaku)'
-		select_sql = select_sql + ' order by %s desc' %s
+		select_sql = select_sql + ' order by %s desc' % (dpsCalcStr,)
 	else:
-		select_sql = select_sql + ' order by createDate desc limit ? offset ?' % dpsCalcStr
+		select_sql = select_sql + ' order by createDate desc'
 	
 	select_sql = select_sql + ' limit ? offset ?'
+
+	print(count_sql)
+	print(select_sql)
 	
 	conn = sqlite3.connect(dbpath+dbname)
 	c = conn.cursor()
@@ -295,7 +332,8 @@ def detailUnitList(page, pageSize, unitName, manageList='False', idList=None, ig
 		unitList.append(unitDisp)
 	conn.close
 	pageList = PageList(unitList, pageSize, math.ceil(maxSize[0]/pageSize), page)
-	return jsonify(pageList)
+	
+	return pageList
 	
 
 # Digest認証
@@ -310,16 +348,25 @@ def get_pw(username):
 # index にアクセスしたときの処理
 @app.route('/')
 def index():
-	title = "flaskMangaViewer"
+	title = u"トップページ"
 	page = 1
 	# index.html をレンダリングする
 	return render_template('index.html', title=title, page=page, isMenu=True)
+
+@app.route('/assist')
+def assist():
+	title = u"アシスト最適計算"
+	page = 1
+	# index.html をレンダリングする
+	return render_template('assist.html', title=title, page=page, isMenu=True)
 
 @app.route('/Search/list', methods=['POST'])
 def searchList():
 	page = 0
 	pageSize = 5
 	unitName = ''
+	zokusei = None
+	bukiShubetsu = None
 	if request.data:
 		content_body_dict = json.loads(request.data)
 	
@@ -332,7 +379,7 @@ def searchList():
 		if 'manageList' in content_body_dict:
 			manageList = request.json.get('manageList')
 		else:
-			manageList = 'False'
+			manageList = False
 
 		if 'pageSize' in content_body_dict:
 			pageSize = request.json.get('pageSize')
@@ -340,35 +387,230 @@ def searchList():
 		if 'unitName' in content_body_dict:
 			unitName = request.json.get('unitName')
 			
+		if 'zokusei' in content_body_dict:
+			zokusei = request.json.get('zokusei')
+			if zokusei == '属性':
+				zokusei = None
+			
+		if 'rare' in content_body_dict:
+			rare = request.json.get('rare')
+			if rare == '星':
+				rare = None
+			
+		if 'bukiShubetsu' in content_body_dict:
+			bukiShubetsu = request.json.get('bukiShubetsu')
+			if bukiShubetsu == '武器':
+				bukiShubetsu = None
+			
 		idList = None
 		if 'idList' in content_body_dict:
 			idList = request.json.get('idList')
 
-	return unitList(page, pageSize, unitName, manageList,idList=idList)
+	return jsonify(detailUnitList(page, pageSize, unitName, zokusei,idList=idList, rare=rare, bukiShubetsu=bukiShubetsu))
 
-@app.route('/Latest/list', methods=['POST'])
-def latestList():
+def getAsistNenreiGroup(nenrei):
+	if nenrei == -1:
+		return -1
+	if nenrei==1:
+		return 0
 	
-	page = 0
-	pageSize = 5
+	if nenrei<=14:
+		return 1
+	
+	if nenrei<=16:
+		return 2
+	
+	if nenrei<=18:
+		return 3
+	
+	if nenrei<=22:
+		return 4
+	
+	return 5
+
+def equalNenreiGroup(nenrei1, nenrei2):
+	nenreiGroup1 = getAsistNenreiGroup(nenrei1)
+	nenreiGroup2 = getAsistNenreiGroup(nenrei2)
+	if nenreiGroup1==0 or nenreiGroup2==0:
+		return True
+	
+	if nenreiGroup1== nenreiGroup2:
+		return True
+	
+	return False
+	
+def getAsistReachGroup(reach):
+	if reach<=50:
+		return 1
+	if reach<=150:
+		return 2
+	return 3
+	
+def equalReach(reach1, reach2):
+	if getAsistReachGroup(reach1) == getAsistReachGroup(reach2):
+		return True
+	return False
+
+def getLevel(rare):
+	if rare == '★5':
+		return 145
+	if rare == '★4':
+		return 135
+	if rare == '★3':
+		return 125
+	if rare == '★2':
+		return 115
+	if rare == '★1':
+		return 105
+	return 0
+
+def asistOptimize(unit, mindType=None, ignoreList=None):
+	assistList = []
+	lastMatchCount = 0
+	for assist in allUnitCache:
+		if unit.id == assist.id:
+			continue
+		
+		if mindType:
+			if mindType == assist.shusshin:
+
+				continue
+				
+
+		matchCount = 1
+		if unit.zokusei == assist.zokusei:
+			matchCount = matchCount + 1
+
+		if unit.bukiShubetsu == assist.bukiShubetsu:
+			matchCount = matchCount + 1
+
+		if unit.shusshin == assist.shusshin:
+			matchCount = matchCount + 1
+
+		if unit.seichouType == assist.seichouType:
+			matchCount = matchCount + 0.5
+
+		if equalNenreiGroup(unit.nenrei, assist.nenrei):
+			matchCount = matchCount + 0.5
+
+		if int(unit.doujiKougekiSuu) == int(assist.doujiKougekiSuu):
+			matchCount = matchCount + 0.5
+
+		if equalReach(unit.reach, assist.reach):
+			matchCount = matchCount + 0.5
+
+		if matchCount > 4.9:
+			print(assist.name+" : "+str(matchCount)+" : "+str(matchCount*getLevel(assist.rare)/100))
+			print(round(matchCount*getLevel(assist.rare)/100,5))
+		matchCount = matchCount*getLevel(assist.rare)/100
+		matchCount = round(matchCount,5)
+			
+		# 1番から順次比較
+		# TODO
+		
+		assistList.append({'unit':assist,'match':matchCount})
+		assistList = sorted(assistList, key=itemgetter('match'), reverse=True)
+		if len(assistList) > 3:
+			assistList.pop(len(assistList) - 1)
+
+			
+	return assistList
+			
+
+
+# DPS計算
+def calcDps(page, pageSize, unit, zokusei=None, rare=None, bukiShubetsu=None,\
+ tekiZokusei=None, doujiKougekiSuu=None, kunrenjo=None, bukiShisetsu=None,\
+ soulKougeki=35000, breakKougeki=35000,\
+ atackRune=33, quickRune=33, zokuseiRune=33, shokugyouRune=33,\
+ icrease=None, icreaseRune=None, zokuseiShinden=5,\
+ bukiTokkou1=None, bukiTokkouValue1=100, bukiTokkou2=None, bukiTokkouValue2=100):
+	sortKey='dps'
+	
+	for unit in allUnitCache:
+		# 検索条件
+		if (zokusei and zokusei != unit.zokusei) or (rare and rare != unit.rare) or (bukiShubetsu and bukiShubetsu != unit.bukiShubetsu):
+			continue
+		
+		kougeki = unit.kakuseiKougeki
+		kougekiKankaku = unit.kougekiKankaku
+		
+		zokusei = 100
+		if tekiZokusei == '炎':
+			zokusei = unit.zokuseiHonoo
+		elif tekiZokusei == '水':
+			zokusei = unit.zokuseiMizu
+		elif tekiZokusei == '風':
+			zokusei = unit.zokuseiKaze
+		elif tekiZokusei == '光':
+			zokusei = unit.zokuseiHikari
+		elif tekiZokusei == '闇':
+			zokusei = unit.zokuseiYami
+		
+		kougeki = kougeki*(1+())
+		
+
+def calcAssist(page, pageSize, unitId, mindType, zokusei=None, idList=None, rare=None, bukiShubetsu=None, doujiKougekiSuu=None, ignoreList=None, sortKey='dps'):
+	# アシスト能力によるDPS計算
+	pass
+
+# 与えられた情報からパーティ最適解を抽出する。
+def calcUnitParty():
+	# ユニットのシード最大時のDPSランク上位3
+		
+	# ユニットの単純のDPSランク上位3
+	pass
+
+
+def getUnit(unitId):
+	for unit in allUnitCache:
+		# 検索条件
+		if (int(unitId) == int(unit.id)):
+			return unit
+	return None
+
+@app.route('/All/list', methods=['POST'])
+def all():
+	unitName = ''
+	zokusei = None
+	bukiShubetsu = None
 	if request.data:
 		content_body_dict = json.loads(request.data)
-	
-		if 'page' in content_body_dict:
-			page = request.json.get('page')
-			page = int(page) - 1
-			if page < 0:
-				page = 0
-
-		if 'manageList' in content_body_dict:
-			manageList = request.json.get('manageList')
-		else:
-			manageList = 'False'
-
-		if 'pageSize' in content_body_dict:
-			pageSize = request.json.get('pageSize')
 		
-	return unitListNoKana(page, pageSize, manageList)
+		if 'unitName' in content_body_dict:
+			unitName = request.json.get('unitName')
+			
+		if 'zokusei' in content_body_dict:
+			zokusei = request.json.get('zokusei')
+			if zokusei == '属性':
+				zokusei = None
+			
+		if 'rare' in content_body_dict:
+			rare = request.json.get('rare')
+			if rare == '星':
+				rare = None
+			
+		if 'bukiShubetsu' in content_body_dict:
+			bukiShubetsu = request.json.get('bukiShubetsu')
+			if bukiShubetsu == '武器':
+				bukiShubetsu = None
+			
+		idList = None
+		if 'idList' in content_body_dict:
+			idList = request.json.get('idList')
+
+	return jsonify(allUnitCache)
+
+@app.route('/assist/list', methods=['POST'])
+def assistList():
+	if request.data:
+		content_body_dict = json.loads(request.data)
+		if 'unitId' in content_body_dict:
+			unitId = request.json.get('unitId')
+			print(unitId)
+			unit = getUnit(unitId)
+			asistDic = asistOptimize(unit)
+	return jsonify(asistDic)
 
 @app.errorhandler(InvalidUsage)
 def error_handler(error):
@@ -377,6 +619,7 @@ def error_handler(error):
 
 if __name__ == '__main__':
 	logs.init_app(app)
+	allUnitCache = detailUnitList(1, -1, None).list
 	app.debug = True  #デバッグモード有効化
 	app.run(host='0.0.0.0', threaded=True) # どこからでもアクセス可能に
 

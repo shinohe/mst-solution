@@ -95,27 +95,45 @@ th:last-child {
 	-moz-border-radius: 0 10px 0 0;
 	border-radius: 0 10px 0 0;
 }
-th,
-td {
+
+div.unitData.ui-grid-a>div.ui-block-a {
+	width:53%;
+}
+
+div.unitData.ui-grid-a>div.ui-block-b {
+	width:47%;
+}
+
+div.unitData {
 	padding: 0.2em;
 	text-align:left;
 	vertical-align:middle;
 	word-wrap: break-word;
 }
 
-th {
+div.header {
 	background-color:#A9DFFF;
 }
 
-th.name {
-	min-width:10em;
+.ui-grid-b>div.name {
+	width:72%;
 }
 
-th.rarelity,
-th.zokusei,
-th.bukiShubetsu,
-th.delete {
-	width:auto;
+.ui-grid-b>div.rarelity {
+	width:18%;
+}
+.ui-grid-b>div.zokusei {
+	width:10%;
+}
+
+.ui-grid-b>div.bukiShubetsu {
+	width:20%;
+}
+.ui-grid-b>div.dps{
+	width:30%;
+}
+.ui-grid-b>div.assist {
+	width:50%;
 }
 
 td {
@@ -165,20 +183,47 @@ fieldset.bukiTokkouField div.ui-block-b div.ui-slider {
 var page = 1;
 var searchFlag = false;
 
+var getAssist = function(unitId, index){
+	console.log(unitId)
+	showLoading();
+	$.ajax({
+		type: "POST",
+		url: "/assist/list",
+		contentType: "application/json",
+		data:'{"unitId":"'+unitId+
+			'","pageSize":3}',
+		dataType: "json",
+		success: function(msg){
+			tr = $(".unitData tr:nth-child("+index+1+")");
+			tr.after("");
+			
+			hideLoading();
+			console.log(msg);
+		}
+	});
+};
+
 var successCallBack = function(msg){
 	$(".indexContent").children("fieldset.ui-grid-solo").remove();
-	$(".indexContent").children("table.unitData").remove();
+	$(".indexContent").children("div.unitData").remove();
 	
 	var thumNailList = JSON.parse(msg.list);
 	if (thumNailList.length > 0) {
-		var $table = $("<table class='unitData'></table>")
-		var $tableHead = $("<tr><th class='name'>ユニット名</th><th class='rarelity'>★</th><th class='zokusei'>属性</th><th class='bukiShubetsu'>武器種</th><th class='dps'>DPS</th><th class='delete'>×</th></tr>");
+		var $table = $("<div class='unitData ui-grid-a'></div>")
+		var $tableHead = $("<div class='ui-block-a header'><div class='ui-grid-b'><div class='ui-block-a name'>ユニット名</div><div class='ui-block-b rarelity'>★</div><div class='ui-block-c zokusei'>属性</div></div></div>"+
+			"<div class='ui-block-b header'><div class='ui-grid-b'><div class='ui-block-a bukiShubetsu'>武器種</div><div class='ui-block-b dps'>DPS</div><div class='ui-block-c assist'>アシスト</div></div></div></div>");
 		$table.append($tableHead);
 		$.each(thumNailList, function( index, file){
 			unitName = file.name.replace("」", "」<br/>");
-			var $div = $("<tr><td>"+unitName+"</td><td class='rarelity'>"+file.rare+"</td><td>"+file.zokusei+"</td><td>"+file.bukiShubetsu+"</td><td>"+Math.round(file.kakuseiKougeki/file.kougekiKankaku)+"</td><td><input type='button' class='delIcon' value='×'></div></td></tr>");
+			var $tr = $("<div class='ui-block-a'><div class='ui-grid-b'><div class='ui-block-a name'>"+unitName+"</div><div class='ui-block-b rarelity'>"+file.rare+"</div><div class='ui-block-c zokusei'>"+file.zokusei+"</div></div></div>"+
+			"<div class='ui-block-b'><div class='ui-grid-b'><div class='ui-block-a bukiShubetsu'>"+file.bukiShubetsu+"</div><div class='ui-block-b dps'>"+Math.round(file.kakuseiKougeki/file.kougekiKankaku)+"</div><div class='ui-block-c assist'><input type='button' class='assistIcon' value='アシスト'/></div></div></div>");
 			
-			$table.append($div);
+			$tr.find(".assistIcon").click(function(){
+				
+				getAssist(file.id, index);
+			});
+			
+			$table.append($tr);
 		});
 		$(".indexContent").append($table);
 	}
@@ -201,20 +246,6 @@ var successCallBack = function(msg){
 	} else {
 		$("#pageBack").show();
 	}
-};
-
-var allList = function(){
-	showLoading();
-	$.ajax({
-		type: "POST",
-		url: "/All/list",
-		contentType: "application/json",
-		data:'{"page":' + page + ', "pageSize":-1}',
-		dataType: "json",
-		success: function(msg){
-			successCallBack(msg);
-		}
-	});
 };
 
 var searchList = function(){
@@ -267,12 +298,6 @@ function initializeContents(){
 		showLoading();
 		searchList();
 		searchFlag = true;
-	});
-	
-	$("#allButton").click(function(){
-		page = 1;
-		showLoading();
-		allList();
 	});
 	
 	$("#pageBack").click(function(){
@@ -414,7 +439,6 @@ function initializeContents(){
 					<input type="text" id="searchText" placeholder="ユニット検索" onkeypress="onKeyEvent(event.keyCode);"/>
 					-->
 					<input type="button" id="searchButton" value="検索"/>
-					<input type="button" id="allButton" value="全て"/>
 				</div>
 			</div>
 		</div>
